@@ -1,0 +1,77 @@
+Bootstrap: docker
+From: nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+
+%labels
+    Author naoki_yamaguchi
+    Description "SAM 3D Objects env (conda + CUDA 12.1, PyTorch/cu121 wheels)"
+
+%post
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+
+    # ===== 基本ツール + Open3D 用のランタイムライブラリ =====
+    apt-get update && \
+        apt-get install -y --no-install-recommends \
+            wget git ca-certificates bzip2 \
+            libx11-6 libxext6 libxrender1 libsm6 libxcb1 \
+            libgl1 libglib2.0-0 \
+        && rm -rf /var/lib/apt/lists/*
+
+    # ===== Miniconda インストール =====
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
+    bash /tmp/miniconda.sh -b -p /opt/conda
+    rm /tmp/miniconda.sh
+
+    # PATH と CUDA 関連
+    export PATH=/opt/conda/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    export CUDA_HOME=/usr/local/cuda
+    # A100，4080 系を想定したアーキ．必要に応じて変更可．
+    export TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9"
+
+    # （任意）channel priority
+    conda config --set channel_priority strict || true
+
+    # ===== sam-3d-objects を clone =====
+    cd /opt
+    git clone https://github.com/facebookresearch/sam-3d-objects.git
+    cd sam-3d-objects
+
+    # ===== Anaconda ToS を非対話で accept =====
+    # ※ 利用規約に同意できるかどうかは事前に必ず確認してください．
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+    export CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
+
+    # ===== conda 環境を default.yml から作成 =====
+    # environments/default.yml 側の name が sam3d-objects の想定．
+    conda env create -f environments/default.yml
+
+    # ===== 追加の pip インストール（dev, p3d, inference） =====
+    # 1) dev ＋ p3d（NGC と cu121 ホイールを使う）
+    export PIP_EXTRA_INDEX_URL="https://pypi.ngc.nvidia.com https://download.pytorch.org/whl/cu121"
+    conda run -n sam3d-objects pip install -e '.[dev]'
+    conda run -n sam3d-objects pip install -e '.[p3d]'
+    unset PIP_EXTRA_INDEX_URL
+
+    # 2) inference（Kaolin のホイール用リンク）
+    export PIP_FIND_LINKS="https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.5.1_cu121.html"
+    conda run -n sam3d-objects pip install -e '.[inference]'
+    conda run -n sam3d-objects pip install imageio[ffmpeg]
+    unset PIP_FIND_LINKS
+
+    # ===== hydra のパッチ適用 =====
+    conda run -n sam3d-objects ./patching/hydra
+
+%environment
+    # コンテナに入ったときに sam3d-objects 環境を自動で有効化
+    export PATH=/opt/conda/envs/sam3d-objects/bin:/opt/conda/bin:/usr/local/cuda/bin:/usr/local/nvidia/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    export CONDA_DEFAULT_ENV=sam3d-objects
+    export PYTHONUNBUFFERED=1
+    export CUDA_HOME=/usr/local/cuda
+    export TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9"
+
+%runscript
+    # デフォルトではプロジェクトルートでコマンドを実行
+    cd /opt/sam-3d-objects
+    exec "$@"
+

@@ -1,7 +1,7 @@
 __pycache__/
 
 # Python venv
-env/
+*.sif
 
 # Local input/output data
 input/
@@ -15,9 +15,10 @@ slurm-*.out
 *.npz
 
 # Root-level images and 3D assets
-/*.png
-/*.jpg
-/*.jpeg
-/*.gif
-/*.webp
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
 *.ply
+*.out

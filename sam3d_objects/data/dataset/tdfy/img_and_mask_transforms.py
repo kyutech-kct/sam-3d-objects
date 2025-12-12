@@ -547,7 +547,8 @@ class ObjectCentricSSI(SSIPointmapNormalizer):
         mask_bool = mask_resized.reshape(-1) > 0.5
         mask_points = pointmap_flat[:, mask_bool]
 
-        if mask_points.isfinite().max() == 0:
+        # 有効な点が1つもない場合や, NaN / Inf しかない場合の安全なハンドリング
+        if mask_points.numel() == 0 or mask_points.isfinite().max() == 0:
             if self.raise_on_no_valid_points:
                 raise ValueError(f"No valid points found in mask")
             logger.warning(f"No valid points found in mask; setting scale to {self.scale_factor} and shift to 0")

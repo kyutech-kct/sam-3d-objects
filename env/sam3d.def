@@ -13,6 +13,7 @@ From: nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
     apt-get update && \
         apt-get install -y --no-install-recommends \
             wget git ca-certificates bzip2 \
+            build-essential cmake ninja-build \
             libx11-6 libxext6 libxrender1 libsm6 libxcb1 \
             libgl1 libglib2.0-0 \
         && rm -rf /var/lib/apt/lists/*
@@ -58,6 +59,13 @@ From: nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
     conda run -n sam3d-objects pip install -e '.[inference]'
     conda run -n sam3d-objects pip install imageio[ffmpeg]
     unset PIP_FIND_LINKS
+
+    # ===== nvdiffrast（テクスチャベイク高速化用）=====
+    # postprocessing_utils.py が `import nvdiffrast.torch as dr` を使うため、
+    # ソースからビルドして導入する（PyPI に無い）。
+    # torch / nvcc が見える状態でビルドするため、pip の build isolation は無効化する。
+    conda run -n sam3d-objects pip install --no-build-isolation \
+        'git+https://github.com/NVlabs/nvdiffrast.git'
 
     # ===== hydra のパッチ適用 =====
     conda run -n sam3d-objects ./patching/hydra
